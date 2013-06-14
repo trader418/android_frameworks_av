@@ -62,6 +62,7 @@
 #include <system/audio.h>
 #ifdef QCOM_HARDWARE
 #include <QCMediaDefs.h>
+#include <cutils/properties.h>
 #endif
 
 #include "ARTPWriter.h"
