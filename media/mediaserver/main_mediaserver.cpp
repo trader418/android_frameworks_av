@@ -43,6 +43,12 @@ void instantiate(void);
 } }
 #endif
 
+#define CSD_HACK	1
+
+#ifdef CSD_HACK
+static void init_libcsd_workaround();
+#endif
+
 int main(int argc, char** argv)
 {
     signal(SIGPIPE, SIG_IGN);
@@ -54,6 +60,11 @@ int main(int argc, char** argv)
     // detailed information such as signal numbers, stop and continue, resource usage, etc.
     // But it is also more complex.  Consider replacing this by independent processes, and using
     // binder on death notification instead.
+
+#ifdef CSD_HACK
+    init_libcsd_workaround();
+#endif
+
     if (doLog && (childPid = fork()) != 0) {
         // media.log service
         //prctl(PR_SET_NAME, (unsigned long) "media.log", 0, 0, 0);
@@ -142,3 +153,32 @@ int main(int argc, char** argv)
         IPCThreadState::self()->joinThreadPool();
     }
 }
+
+#ifdef CSD_HACK
+
+#include <dlfcn.h>
+static void *csd = 0;
+static int (*csd_client_start_record)(int) = 0;
+static int (*csd_client_stop_record)() = 0;
+static void doit(int sig) {
+    ALOGI("CSD HACK: signal %d received", sig);
+    (*csd_client_stop_record) ();
+    if (sig == SIGHUP) (*csd_client_start_record) (1);
+}
+static void init_libcsd_workaround() {
+    csd = dlopen("/system/lib/libcsd-client.so",RTLD_NOW);
+    if (!csd) return;
+    csd_client_start_record = (typeof(csd_client_start_record)) dlsym(csd,"csd_client_start_record");   
+    csd_client_stop_record = (typeof(csd_client_stop_record)) dlsym(csd,"csd_client_stop_record");   
+    if (!csd_client_start_record || !csd_client_stop_record) {
+	dlclose(csd);
+	return;
+    }	 
+    signal(SIGUSR1, doit);
+    signal(SIGHUP, doit);
+    ALOGI("libcsd-client setup done");
+}
+
+#endif
+
+

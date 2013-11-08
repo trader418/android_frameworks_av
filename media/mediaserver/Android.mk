@@ -41,4 +41,6 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_MODULE:= mediaserver
 
+LOCAL_LDFLAGS += -ldl
+
 include $(BUILD_EXECUTABLE)
