@@ -1123,7 +1123,7 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
            }
         }
 
-#ifdef QCOM_HARDWARE
+#ifdef QCOM_DIRECTTRACK
         key = String8(AudioParameter::keyADSPStatus);
         if (param.get(key, value) == NO_ERROR) {
             ALOGV("Set keyADSPStatus:%s", value.string());
