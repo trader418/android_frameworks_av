@@ -1328,12 +1328,12 @@ audio_io_handle_t AudioPolicyManager::getOutputForDevice(
             if (AUDIO_OUTPUT_FLAG_VOIP_RX & flags) {
                 // allow VoIP using voice path
                 // Do nothing
-            } else if((flags & AUDIO_OUTPUT_FLAG_FAST) != 0) {
+            } else if((flags & AUDIO_OUTPUT_FLAG_FAST) == 0) {
                 ALOGD(" MODE_IN_COMM is setforcing deep buffer output for non ULL... flags: %x", flags);
                 // use deep buffer path for all non ULL outputs
                 flags = AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
             }
-        } else if ((flags & AUDIO_OUTPUT_FLAG_FAST) != 0) {
+        } else if ((flags & AUDIO_OUTPUT_FLAG_FAST) == 0) {
             ALOGD(" Record mode is on forcing deep buffer output for non ULL... flags: %x ", flags);
             // use deep buffer path for all non ULL outputs
             flags = AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
@@ -2592,13 +2592,24 @@ return false;
 
 #ifdef ENABLE_AV_ENHANCEMENTS
     if (audio_is_offload_pcm(offloadInfo.format)) {
-        if(property_get("audio.offload.pcm.16bit.enable", propValue, NULL))
-            pcmOffload = atoi(propValue) || !strncmp("true", propValue, 4);
-        if(property_get("audio.offload.pcm.24bit.enable", propValue, NULL))
-            pcmOffload = pcmOffload || atoi(propValue) || !strncmp("true", propValue, 4);
-        if (pcmOffload) {
+        bool prop_enabled = false;
+        if ((AUDIO_FORMAT_PCM_16_BIT_OFFLOAD == offloadInfo.format) &&
+               property_get("audio.offload.pcm.16bit.enable", propValue, NULL)) {
+            prop_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+        }
+
+        if ((AUDIO_FORMAT_PCM_24_BIT_OFFLOAD == offloadInfo.format) &&
+               property_get("audio.offload.pcm.24bit.enable", propValue, NULL)) {
+            prop_enabled = atoi(propValue) || !strncmp("true", propValue, 4);
+        }
+
+        if (prop_enabled) {
             ALOGI("PCM offload property is enabled");
-        } else {
+            pcmOffload = true;
+        }
+
+        if (!pcmOffload) {
+            ALOGV("system property not enabled for PCM offload format[%x]",offloadInfo.format);
             return false;
         }
     }
@@ -7463,6 +7474,7 @@ bool AudioPolicyManager::IOProfile::isCompatibleProfile(audio_devices_t device,
 {
     const bool isPlaybackThread = mType == AUDIO_PORT_TYPE_MIX && mRole == AUDIO_PORT_ROLE_SOURCE;
     const bool isRecordThread = mType == AUDIO_PORT_TYPE_MIX && mRole == AUDIO_PORT_ROLE_SINK;
+    ALOGV("isPlaybackThread %d,isRecordThread %d", isPlaybackThread, isRecordThread);
     ALOG_ASSERT(isPlaybackThread != isRecordThread);
     if ((mSupportedDevices.types() & device) != device) {
         return false;

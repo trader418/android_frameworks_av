@@ -1070,7 +1070,9 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
     {
          Mutex::Autolock autoLock(mLock);
          syncQueuesDone_l();
-         setPauseStartedTimeRealUs(-1);
+         if (!(offloadingAudio()) && !(mPaused)) {
+             setPauseStartedTimeRealUs(-1);
+         }
     }
 
     ALOGV("flushing %s", audio ? "audio" : "video");
@@ -1372,8 +1374,6 @@ bool NuPlayer::Renderer::onOpenAudioSink(
     CHECK(format->findString("mime", &mime));
 
 #ifdef ENABLE_AV_ENHANCEMENTS
-    char prop[PROPERTY_VALUE_MAX] = {0};
-    property_get("audio.offload.pcm.enable", prop, "0");
     pcmOffload = ExtendedUtils::isPcmOffloadEnabled() &&
             !strcasecmp(mime.c_str(), MEDIA_MIMETYPE_AUDIO_RAW);
 
