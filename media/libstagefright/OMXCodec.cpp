@@ -277,7 +277,8 @@ void OMXCodec::findMatchingCodecs(
         return;
     }
 
-    if (matchComponentName && !strncmp("FLACDecoder", matchComponentName, 10)) {
+#ifdef QTI_FLAC_DECODER
+    if (matchComponentName && !strncmp("FLACDecoder", matchComponentName, strlen("FLACDecoder"))) {
             matchingCodecs->add();
 
             CodecNameAndQuirks *entry = &matchingCodecs->editItemAt(index);
@@ -285,6 +286,7 @@ void OMXCodec::findMatchingCodecs(
             entry->mQuirks = 0;
             return;
     }
+#endif
 #endif
 
     for (;;) {
@@ -408,10 +410,12 @@ sp<MediaSource> OMXCodec::Create(
 
     Vector<CodecNameAndQuirks> matchingCodecs;
 
-    if (!strncmp(mime, MEDIA_MIMETYPE_AUDIO_FLAC, 10)) {
+#ifdef QTI_FLAC_DECODER
+    if (!strncmp(mime, MEDIA_MIMETYPE_AUDIO_FLAC, strlen(MEDIA_MIMETYPE_AUDIO_FLAC))) {
         findMatchingCodecs(mime, createEncoder,
             "FLACDecoder", flags, &matchingCodecs);
     } else
+#endif
         findMatchingCodecs(
             mime, createEncoder, matchComponentName, flags, &matchingCodecs);
 
