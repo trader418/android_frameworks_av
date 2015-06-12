@@ -399,7 +399,6 @@ void NuPlayer::Renderer::onMessageReceived(const sp<AMessage> &msg) {
         case kWhatStartAudioSink:
         {
             mAudioSink->start();
-            mAudioSinkStopped = false;
             break;
         }
 
