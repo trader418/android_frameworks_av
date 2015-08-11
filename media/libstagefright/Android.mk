@@ -225,6 +225,8 @@ LOCAL_SHARED_LIBRARIES += \
         libdl
 
 LOCAL_CFLAGS += -Wno-multichar
+LOCAL_CLANG := true
+LOCAL_SANITIZE := unsigned-integer-overflow
 
 ifeq ($(DTS_CODEC_M_), true)
   LOCAL_SRC_FILES+= DTSUtils.cpp
