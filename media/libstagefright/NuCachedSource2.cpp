@@ -599,8 +599,7 @@ ssize_t NuCachedSource2::readInternal(off64_t offset, void *data, size_t size) {
     }
 
     if (offset < mCacheOffset
-            || (offset >= (off64_t)(mCacheOffset + mCache->totalSize())
-                && offset >= (off64_t)(mCacheOffset + mLowwaterThresholdBytes))) {
+            || offset >= (off64_t)(mCacheOffset + mCache->totalSize())) {
         static const off64_t kPadding = 256 * 1024;
 
         // In the presence of multiple decoded streams, once of them will
