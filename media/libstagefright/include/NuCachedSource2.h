@@ -79,7 +79,6 @@ private:
         kPageSize                       = 65536,
         kDefaultHighWaterThreshold      = 20 * 1024 * 1024,
         kDefaultLowWaterThreshold       = 4 * 1024 * 1024,
-        kDefaultGrayAreaBytes           = kDefaultLowWaterThreshold,
 
         // Read data after a 15 sec timeout whether we're actively
         // fetching or not.
@@ -116,7 +115,6 @@ private:
 
     size_t mHighwaterThresholdBytes;
     size_t mLowwaterThresholdBytes;
-    size_t mGrayAreaBytes;
 
     bool mSuspended;
 
