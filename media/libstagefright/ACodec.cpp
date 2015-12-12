@@ -55,6 +55,10 @@
 #include <OMX_IndexExt.h>
 #include <OMX_AsString.h>
 
+#ifdef USE_SAMSUNG_COLORFORMAT
+#include <sec_format.h>
+#endif
+
 #include "include/avc_utils.h"
 
 #include <stagefright/AVExtensions.h>
@@ -502,6 +506,8 @@ ACodec::ACodec()
       mSentFormat(false),
       mIsVideo(false),
       mIsEncoder(false),
+      mEncoderComponent(false),
+      mComponentAllocByName(false),
       mFatalError(false),
       mShutdownInProgress(false),
       mExplicitShutdown(false),
@@ -913,12 +919,21 @@ status_t ACodec::setupNativeWindowSizeFormatAndUsage(
     usage |= kVideoGrallocUsage;
     *finalUsage = usage;
 
+#ifdef USE_SAMSUNG_COLORFORMAT
+    OMX_COLOR_FORMATTYPE eNativeColorFormat = def.format.video.eColorFormat;
+    setNativeWindowColorFormat(eNativeColorFormat);
+#endif
+
     ALOGV("gralloc usage: %#x(OMX) => %#x(ACodec)", omxUsage, usage);
     return setNativeWindowSizeFormatAndUsage(
             nativeWindow,
             def.format.video.nFrameWidth,
             def.format.video.nFrameHeight,
+#ifdef USE_SAMSUNG_COLORFORMAT
+            eNativeColorFormat,
+#else
             def.format.video.eColorFormat,
+#endif
             mRotationDegrees,
             usage);
 }
@@ -1257,6 +1272,27 @@ void ACodec::dumpBuffers(OMX_U32 portIndex) {
                 _asString(info.mStatus), info.mStatus, info.mDequeuedAt);
     }
 }
+
+#ifdef USE_SAMSUNG_COLORFORMAT
+void ACodec::setNativeWindowColorFormat(OMX_COLOR_FORMATTYPE &eNativeColorFormat)
+{
+    // In case of Samsung decoders, we set proper native color format for the Native Window
+    if (!strcasecmp(mComponentName.c_str(), "OMX.SEC.AVC.Decoder")
+        || !strcasecmp(mComponentName.c_str(), "OMX.SEC.FP.AVC.Decoder")
+        || !strcasecmp(mComponentName.c_str(), "OMX.SEC.MPEG4.Decoder")
+        || !strcasecmp(mComponentName.c_str(), "OMX.Exynos.AVC.Decoder")) {
+        switch (eNativeColorFormat) {
+            case OMX_COLOR_FormatYUV420SemiPlanar:
+                eNativeColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_YCbCr_420_SP;
+                break;
+            case OMX_COLOR_FormatYUV420Planar:
+            default:
+                eNativeColorFormat = (OMX_COLOR_FORMATTYPE)HAL_PIXEL_FORMAT_YCbCr_420_P;
+                break;
+        }
+    }
+}
+#endif
 
 status_t ACodec::cancelBufferToNativeWindow(BufferInfo *info) {
     CHECK_EQ((int)info->mStatus, (int)BufferInfo::OWNED_BY_US);
@@ -5473,6 +5509,8 @@ void ACodec::UninitializedState::stateEntered() {
     mCodec->mOMX.clear();
     mCodec->mQuirks = 0;
     mCodec->mFlags = 0;
+    mCodec->mEncoderComponent = 0;
+    mCodec->mComponentAllocByName = 0;
     mCodec->mInputMetadataType = kMetadataBufferTypeInvalid;
     mCodec->mOutputMetadataType = kMetadataBufferTypeInvalid;
     mCodec->mComponentName.clear();
@@ -5578,6 +5616,7 @@ bool ACodec::UninitializedState::onAllocateComponent(const sp<AMessage> &msg) {
         ssize_t index = matchingCodecs.add();
         OMXCodec::CodecNameAndQuirks *entry = &matchingCodecs.editItemAt(index);
         entry->mName = String8(componentName.c_str());
+        mCodec->mComponentAllocByName = true;
 
         if (!OMXCodec::findCodecQuirks(
                     componentName.c_str(), &entry->mQuirks)) {
@@ -5588,6 +5627,10 @@ bool ACodec::UninitializedState::onAllocateComponent(const sp<AMessage> &msg) {
 
         if (!msg->findInt32("encoder", &encoder)) {
             encoder = false;
+        }
+
+        if (encoder == true) {
+            mCodec->mEncoderComponent = true;
         }
 
         OMXCodec::findMatchingCodecs(
@@ -5792,17 +5835,13 @@ bool ACodec::LoadedState::onConfigureComponent(
         ALOGE("[%s] configureCodec returning error %d",
               mCodec->mComponentName.c_str(), err);
 
-        int32_t encoder;
-        if (!msg->findInt32("encoder", &encoder)) {
-            encoder = false;
-        }
-
-        if (!encoder && !strncmp(mime.c_str(), "video/", strlen("video/"))) {
+        if (!mCodec->mEncoderComponent && !mCodec->mComponentAllocByName &&
+            !strncmp(mime.c_str(), "video/", strlen("video/"))) {
             Vector<OMXCodec::CodecNameAndQuirks> matchingCodecs;
 
             OMXCodec::findMatchingCodecs(
                 mime.c_str(),
-                encoder, // createEncoder
+                false, // createEncoder
                 NULL,  // matchComponentName
                 0,     // flags
                 &matchingCodecs);
@@ -5844,8 +5883,7 @@ bool ACodec::LoadedState::onConfigureComponent(
 
             if (mCodec->mNode == 0) {
                 if (!mime.empty()) {
-                    ALOGE("Unable to instantiate a %scoder for type '%s' with err %#x.",
-                            encoder ? "en" : "de", mime.c_str(), err);
+                    ALOGE("Unable to instantiate a decoder for type '%s'", mime.c_str());
                 } else {
                     ALOGE("Unable to instantiate codec '%s' with err %#x.", componentName.c_str(), err);
                 }
