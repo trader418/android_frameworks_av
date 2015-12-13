@@ -44,6 +44,7 @@
 #include <media/stagefright/MediaCodecSource.h>
 #include <media/stagefright/OMXClient.h>
 #include <media/stagefright/OMXCodec.h>
+#include <media/stagefright/WAVEWriter.h>
 #include <media/MediaProfiles.h>
 #include <camera/ICamera.h>
 #include <camera/CameraParameters.h>
@@ -822,6 +823,10 @@ status_t StagefrightRecorder::prepareInternal() {
             status = setupMPEG2TSRecording();
             break;
 
+        case OUTPUT_FORMAT_WAVE:
+            status = setupWAVERecording();
+            break;
+
         default:
             if (handleCustomRecording() != OK) {
                 ALOGE("Unsupported output file format: %d", mOutputFormat);
@@ -899,6 +904,7 @@ status_t StagefrightRecorder::start() {
         case OUTPUT_FORMAT_AAC_ADTS:
         case OUTPUT_FORMAT_RTP_AVP:
         case OUTPUT_FORMAT_MPEG2TS:
+        case OUTPUT_FORMAT_WAVE:
         {
             status = mWriter->start();
             break;
@@ -990,6 +996,9 @@ sp<MediaSource> StagefrightRecorder::createAudioSource() {
         case AUDIO_ENCODER_AAC_ELD:
             format->setString("mime", MEDIA_MIMETYPE_AUDIO_AAC);
             format->setInt32("aac-profile", OMX_AUDIO_AACObjectELD);
+            break;
+        case AUDIO_ENCODER_LPCM:
+            format->setString("mime", MEDIA_MIMETYPE_AUDIO_RAW);
             break;
 
         default:
@@ -1193,6 +1202,15 @@ status_t StagefrightRecorder::setupMPEG2TSRecording() {
     return OK;
 }
 
+status_t StagefrightRecorder::setupWAVERecording() {
+    CHECK(mOutputFormat == OUTPUT_FORMAT_WAVE);
+    CHECK(mAudioEncoder == AUDIO_ENCODER_LPCM);
+    CHECK(mAudioSource != AUDIO_SOURCE_CNT);
+
+    mWriter = new WAVEWriter(mOutputFd);
+    return setupRawAudioRecording();
+}
+
 void StagefrightRecorder::clipVideoFrameRate() {
     ALOGV("clipVideoFrameRate: encoder %d", mVideoEncoder);
     if (mFrameRate == -1) {
@@ -1260,7 +1278,8 @@ status_t StagefrightRecorder::checkVideoEncoderCapabilities() {
             (mVideoEncoder == VIDEO_ENCODER_H263 ? MEDIA_MIMETYPE_VIDEO_H263 :
              mVideoEncoder == VIDEO_ENCODER_MPEG_4_SP ? MEDIA_MIMETYPE_VIDEO_MPEG4 :
              mVideoEncoder == VIDEO_ENCODER_VP8 ? MEDIA_MIMETYPE_VIDEO_VP8 :
-             mVideoEncoder == VIDEO_ENCODER_H264 ? MEDIA_MIMETYPE_VIDEO_AVC : ""),
+             mVideoEncoder == VIDEO_ENCODER_H264 ? MEDIA_MIMETYPE_VIDEO_AVC :
+             mVideoEncoder == VIDEO_ENCODER_H265 ? MEDIA_MIMETYPE_VIDEO_HEVC : ""),
             false /* decoder */, true /* hwCodec */, &codecs);
 
     if (!mCaptureFpsEnable) {
@@ -1347,8 +1366,10 @@ void StagefrightRecorder::setDefaultVideoEncoderIfNecessary() {
             int videoCodec = mEncoderProfiles->getCamcorderProfileParamByName(
                     "vid.codec", mCameraId, CAMCORDER_QUALITY_LOW);
 
-            if (videoCodec > VIDEO_ENCODER_DEFAULT &&
-                videoCodec < VIDEO_ENCODER_LIST_END) {
+            if ((videoCodec > VIDEO_ENCODER_DEFAULT &&
+                 videoCodec < VIDEO_ENCODER_LIST_END) ||
+                (videoCodec > VIDEO_ENCODER_LIST_VENDOR_START &&
+                 videoCodec < VIDEO_ENCODER_LIST_VENDOR_END)) {
                 mVideoEncoder = (video_encoder)videoCodec;
             } else {
                 // default to H.264 if camcorder profile not available
@@ -1526,8 +1547,12 @@ status_t StagefrightRecorder::setupCameraSource(
     return OK;
 }
 
-bool StagefrightRecorder::setCustomVideoEncoderMime(const video_encoder /*videoEncoder*/,
-        sp<AMessage> /*format*/) {
+bool StagefrightRecorder::setCustomVideoEncoderMime(const video_encoder videoEncoder,
+        sp<AMessage> format) {
+    if (videoEncoder == VIDEO_ENCODER_H265) {
+        format->setString("mime", MEDIA_MIMETYPE_VIDEO_HEVC);
+        return true;
+    }
     return false;
 }
 
@@ -1662,6 +1687,7 @@ status_t StagefrightRecorder::setupAudioEncoder(const sp<MediaWriter>& writer) {
         case AUDIO_ENCODER_AAC:
         case AUDIO_ENCODER_HE_AAC:
         case AUDIO_ENCODER_AAC_ELD:
+        case AUDIO_ENCODER_LPCM:
             break;
 
         default:
